@@ -40,6 +40,7 @@ bool switch_highlow = true;
 // Time management
 unsigned long curr_time;
 unsigned long prev_time;
+bool motor_is_on = 0;
 
 // helper function to turn a 0.0-1.0 float into an 8-bit duty cycle
 int convert_duty(float duty)
@@ -96,24 +97,49 @@ void loop() {
       // then we should get a float for the amount of time to run the motor, in seconds...
       token = strtok(NULL, " ");
       motor_runtime_millis = int(atof(token)*1000.0);
-      // duty_fwd = atof(token);
-      // token = strtok(NULL, " ");
     }
-    // if(token == NULL){
-    //   Serial.println("Error! Got one duty cycle but not the second, OR you didn't send in a valid format.");
-    // }
-    // else{
-    //   duty_rev = atof(token);
-    // }
     Serial.println("You want to run the motor ");
     Serial.println(cmd_letter);
     Serial.println("At this power:");
     Serial.println(pwr);
     Serial.println("For this many milliseconds:");
     Serial.println(motor_runtime_millis);
-    // actually set the PWM duty cycles
-    // analogWrite(AIN1, convert_duty(duty_fwd));
-    // analogWrite(AIN2, convert_duty(duty_rev));
+    // If we got a good reading, set up for a timed loop:
+    if(cmd_letter == "f" or cmd_letter == "r"){
+      // Serial.println("Valid command.");
+      // Reset the time
+      prev_time = millis();
+      curr_time = millis();
+      // We choose fast decay here ("coast"). So, per https://www.ti.com/lit/ds/symlink/drv8833.pdf, ...
+      if(cmd_letter == "f"){
+        // if forward, AIN1 is PWM, and AIN2 is low.
+        analogWrite(AIN1, convert_duty(pwr));
+        analogWrite(AIN2, 0);
+      }
+      if(cmd_letter = "r"){
+        // if reverse, AIN1 is low, and AIN2 is PWM.
+        analogWrite(AIN1, 0);
+        analogWrite(AIN2, convert_duty(pwr));
+      }
+      Serial.println("Turning motor ON");
+      motor_is_on = 1;
+      digitalWrite(LED_BUILTIN, HIGH);
+      // run until time is up...
+    }
+  }
+  // now, after handling any serial received, we update our time and check if we need to shut off the motor.
+  if(motor_is_on){
+    curr_time = millis();
+    if( (curr_time - prev_time) > motor_runtime_millis ){
+      // shut down and reset.
+      analogWrite(AIN1, 0);
+      analogWrite(AIN2, 0);
+      motor_runtime_millis = 0;
+      prev_time = millis();
+      motor_is_on = 0;
+      Serial.println("Turning motor OFF");
+      digitalWrite(LED_BUILTIN, LOW);
+    }
   }
 }
 
