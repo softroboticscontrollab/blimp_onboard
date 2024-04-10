@@ -27,12 +27,6 @@ int AIN2 = 6;
 int ESC_PIN = 9;
 int ESC_MAX = 2000;
 int ESC_MIN = 1000;
-int ESC_RANGE = ESC_MAX - ESC_MIN;
-int ESC_HALFRANGE = int(ESC_RANGE/2.0);
-int ESC_AVG = ESC_HALFRANGE + ESC_MIN;
-// placeholder variables for the fan conversion function
-float raw_speed = 0.0; // since can be negative
-int adjusted_speed = 0; // is a positive number
 // placeholders for what we'll read from the serial terminal
 String received;
 float pwr = 0.0;
@@ -57,22 +51,6 @@ int convert_duty(float duty)
   return raw_duty;
 }
 
-// helper function to turn a -1.0 to +1.0 float into an int for the Servo library.
-// Assumes that ESC_MIN and ESC_MAX are declared and assigned values.
-int convert_esc(float percent_speed)
-{
-  raw_speed = percent_speed * ESC_HALFRANGE; // this number is "fraction of 100% power but centered at 0"
-  raw_speed = raw_speed + ESC_AVG; // should be between ESC_MAX and ESC_MIN
-  adjusted_speed = floor(raw_speed); // now is a positive number only
-  // constrain percent speed to be between min and max just in case someone passed in a too-big number.
-  adjusted_speed = (adjusted_speed < ESC_MIN) ? ESC_MIN : adjusted_speed;
-  adjusted_speed = (adjusted_speed > ESC_MAX) ? ESC_MAX : adjusted_speed;
-  // DEBUGGING
-  Serial.println("Setting ESC speed to:");
-  Serial.println(adjusted_speed);
-  return adjusted_speed;
-}
-
 void setup() {
   Serial.begin(SERIAL_RATE);
   Serial.setTimeout(10); // makes read faster
@@ -93,16 +71,16 @@ void setup() {
   esc.attach(ESC_PIN, ESC_MIN, ESC_MAX);
   // test the ESC
   Serial.println("ESC NEUTRAL");
-  esc.write(ESC_AVG);
+  esc.write(1500);
   delay(10000);
   Serial.println("ESC ON FWD");
-  esc.write(convert_esc(0.2));
+  esc.write(1600);
   delay(10000);
   Serial.println("ESC ON REV");
-  esc.write(convert_esc(-0.2));
+  esc.write(1400);
   delay(10000);
   Serial.println("ESC NEUTRAL");
-  esc.write(ESC_AVG);
+  esc.write(int(ESC_MAX-ESC_MIN)/2.0);
   // Time management for timed motor loops
   prev_time = millis();
   curr_time = millis();
