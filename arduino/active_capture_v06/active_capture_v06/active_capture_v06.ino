@@ -68,8 +68,8 @@ int convert_esc(float percent_speed)
   adjusted_speed = (adjusted_speed < ESC_MIN) ? ESC_MIN : adjusted_speed;
   adjusted_speed = (adjusted_speed > ESC_MAX) ? ESC_MAX : adjusted_speed;
   // DEBUGGING
-  Serial.println("Setting ESC speed to:");
-  Serial.println(adjusted_speed);
+  // Serial.println("Setting ESC speed to:");
+  // Serial.println(adjusted_speed);
   return adjusted_speed;
 }
 
@@ -91,18 +91,19 @@ void setup() {
   // set up the ESC
   pinMode(ESC_PIN, OUTPUT);
   esc.attach(ESC_PIN, ESC_MIN, ESC_MAX);
-  // test the ESC
-  Serial.println("ESC NEUTRAL");
   esc.write(ESC_AVG);
-  delay(10000);
-  Serial.println("ESC ON FWD");
-  esc.write(convert_esc(0.2));
-  delay(10000);
-  Serial.println("ESC ON REV");
-  esc.write(convert_esc(-0.2));
-  delay(10000);
-  Serial.println("ESC NEUTRAL");
-  esc.write(ESC_AVG);
+  // // test the ESC
+  // Serial.println("ESC NEUTRAL");
+  // esc.write(ESC_AVG);
+  // delay(10000);
+  // Serial.println("ESC ON FWD");
+  // esc.write(convert_esc(0.2));
+  // delay(10000);
+  // Serial.println("ESC ON REV");
+  // esc.write(convert_esc(-0.2));
+  // delay(10000);
+  // Serial.println("ESC NEUTRAL");
+  // esc.write(ESC_AVG);
   // Time management for timed motor loops
   prev_time = millis();
   curr_time = millis();
