@@ -33,21 +33,13 @@ int ESC_AVG = ESC_HALFRANGE + ESC_MIN;
 // placeholder variables for the fan conversion function
 float raw_speed = 0.0; // since can be negative
 int adjusted_speed = 0; // is a positive number
-
-// placeholders for what we'll read from the serial terminal
-// String received;
-// float pwr = 0.0;
 int raw_duty = 0;
-// because compiler is annoying and sscanf can't do floats directly
-// char *token;
-// char received_raw[BUFSIZE];
-// String cmd_letter = "";
 
 // For the open loop, set our motion parameters
 int ascend_time_millis = 10000;
 int descend_time_millis = 10000;
-int capture_open_pulse = 500;
-int capture_close_pulse = 500;
+int capture_open_pulse = 700;
+int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
 float fan_pwr_default = 0.2;
 float capture_pwr_default = 0.5;
@@ -212,7 +204,6 @@ void loop() {
   }
 
   // for the capture:
-  // States: 0 = capture open waiting, 1 = capture closing, 2 = capture closed waiting, 3 = capture opening
   switch(capture_state){
     case 0:
       // capture is open, waiting. Switch to closing if timed out
