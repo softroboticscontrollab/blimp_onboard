@@ -8,6 +8,7 @@
  * No input. Just run it. Will output misc debugging messages if you plug in over USB.
  */
 
+// for the brushless motor
 #include <Servo.h>
 Servo esc;
 
@@ -32,23 +33,24 @@ int ESC_AVG = ESC_HALFRANGE + ESC_MIN;
 // placeholder variables for the fan conversion function
 float raw_speed = 0.0; // since can be negative
 int adjusted_speed = 0; // is a positive number
+
 // placeholders for what we'll read from the serial terminal
-String received;
-float pwr = 0.0;
-int motor_runtime_millis = 0;
+// String received;
+// float pwr = 0.0;
 int raw_duty = 0;
 // because compiler is annoying and sscanf can't do floats directly
-char *token;
-char received_raw[BUFSIZE];
-String cmd_letter = "";
+// char *token;
+// char received_raw[BUFSIZE];
+// String cmd_letter = "";
 
 // For the open loop, set our motion parameters
 int ascend_time_millis = 10000;
 int descend_time_millis = 10000;
 int capture_open_pulse = 500;
 int capture_close_pulse = 500;
-int capture_time_millis = 10000;
+int capture_waittime_millis = 8000;
 float fan_pwr_default = 0.2;
+float capture_pwr_default = 0.5;
 // flags for the state machine of capture and fan
 int fan_state = 0; // States: 0 = not running, 1 = ascend, 2 = descend
 int capture_state = 0; // States: 0 = capture open waiting, 1 = capture closing, 2 = capture closed waiting, 3 = capture opening
@@ -56,7 +58,6 @@ int capture_state = 0; // States: 0 = capture open waiting, 1 = capture closing,
 unsigned long curr_time;
 unsigned long prev_time_fan;
 unsigned long prev_time_capture;
-bool motor_is_on = 0;
 
 // helper function to turn a 0.0-1.0 float into an 8-bit duty cycle
 int convert_duty(float duty)
@@ -79,8 +80,8 @@ int convert_esc(float percent_speed)
   adjusted_speed = (adjusted_speed < ESC_MIN) ? ESC_MIN : adjusted_speed;
   adjusted_speed = (adjusted_speed > ESC_MAX) ? ESC_MAX : adjusted_speed;
   // DEBUGGING
-  Serial.println("Setting ESC speed to:");
-  Serial.println(adjusted_speed);
+  // Serial.println("Setting ESC speed to:");
+  // Serial.println(adjusted_speed);
   return adjusted_speed;
 }
 
@@ -107,6 +108,43 @@ void update_fan(int state, float pwr)
   }
 }
 
+// helper that toggles our capture mechanism. state = int, see above, pwr = percent if override desired.
+void update_capture(int state){
+  update_capture(state, capture_pwr_default);
+}
+void update_capture(int state, float pwr)
+{
+  // States: 0 = capture open waiting, 1 = capture closing, 2 = capture closed waiting, 3 = capture opening
+  switch(state){
+    case 0:
+      // no motion.
+      analogWrite(AIN1, 0);
+      analogWrite(AIN2, 0);
+      digitalWrite(LED_BUILTIN, LOW);
+      break;
+
+    case 1:
+      // closing (forward)
+      analogWrite(AIN1, convert_duty(pwr));
+      analogWrite(AIN2, 0);
+      digitalWrite(LED_BUILTIN, HIGH);
+      break;
+
+    case 2:
+      // no motion.
+      analogWrite(AIN1, 0);
+      analogWrite(AIN2, 0);
+      digitalWrite(LED_BUILTIN, LOW);
+      break;
+    
+    case 3:
+      // opening (reverse)
+      analogWrite(AIN1, 0);
+      analogWrite(AIN2, convert_duty(pwr));
+      digitalWrite(LED_BUILTIN, HIGH);
+  }
+}
+
 void setup() {
   Serial.begin(SERIAL_RATE);
   Serial.setTimeout(10); // makes read faster
@@ -126,18 +164,9 @@ void setup() {
   pinMode(ESC_PIN, OUTPUT);
   esc.attach(ESC_PIN, ESC_MIN, ESC_MAX);
   esc.write(ESC_AVG);
-  // test the ESC
-  Serial.println("ESC NEUTRAL");
-  esc.write(ESC_AVG);
+  Serial.println("ESC NEUTRAL, Waiting for esc to start up...");
   delay(10000);
-  // Serial.println("ESC ON FWD");
-  // esc.write(convert_esc(0.2));
-  // delay(10000);
-  // Serial.println("ESC ON REV");
-  // esc.write(convert_esc(-0.2));
-  // delay(10000);
-  // Serial.println("ESC NEUTRAL");
-  // esc.write(ESC_AVG);
+  Serial.println("Beginning open loop motion...");
   // Time management for timed motor loops
   prev_time_fan = millis();
   prev_time_capture = millis();
@@ -146,25 +175,12 @@ void setup() {
   fan_state = 1;
   update_fan(fan_state);
   capture_state = 0;
+  update_capture(capture_state);
 }
-
-//   // now, after handling any serial received, we update our time and check if we need to shut off the motor.
-  // if(motor_is_on){
-  //   curr_time = millis();
-  //   if( (curr_time - prev_time) > motor_runtime_millis ){
-  //     // shut down and reset.
-  //     analogWrite(AIN1, 0);
-  //     analogWrite(AIN2, 0);
-  //     motor_runtime_millis = 0;
-  //     prev_time = millis();
-  //     motor_is_on = 0;
-  //     Serial.println("Turning motor OFF");
-  //     digitalWrite(LED_BUILTIN, LOW);
-  //   }
-  // }
 
 void loop() {
   curr_time = millis();
+
   // For the fan:
   switch(fan_state){
     case 0:
@@ -174,11 +190,11 @@ void loop() {
     case 1:
       // ascending
       // Check if our ascent time is up. If so, switch to descending
-      if( (curr_time - prev_time_capture) > ascend_time_millis){
+      if( (curr_time - prev_time_fan) > ascend_time_millis){
         fan_state = 2;
-        prev_time_capture = millis();
+        prev_time_fan = millis();
         // DEBUGGING
-        Serial.println("Switching to descent...");
+        Serial.println("Switching to descend...");
         update_fan(fan_state);
       }
       break;
@@ -186,82 +202,56 @@ void loop() {
     case 2:
       // descending
       // Check if our descent time is up. If so, switch to ascending.
-      if((curr_time - prev_time_capture) > descend_time_millis){
+      if((curr_time - prev_time_fan) > descend_time_millis){
         fan_state = 1;
-        prev_time_capture = millis();
-        Serial.println("Switching to ascent...");
+        prev_time_fan = millis();
+        Serial.println("Switching to ascend...");
         update_fan(fan_state);
       }
       break;
   }
-  // update_fan(fan_state);
 
-  // If there is at least one byte in the serial buffer, someone is trying to send us data, so read that first (don't lose anything!)
-  // if( Serial.available() > 0){
-  //   // presummably the user is smart enough to send the right string... TODO validate!
-  //   received = Serial.readString();
-  //   // using strtok to parse manually
-  //   received.toCharArray(received_raw, BUFSIZE);
-  //   token = strtok(received_raw, " ");
-  //   if(token == NULL){
-  //     Serial.println("Error! received empty string!");
-  //   }
-  //   else{
-  //     // first, we should get either an f or an r
-  //     cmd_letter = token;
-  //     // then we should get a float for the power level...
-  //     token = strtok(NULL, " ");
-  //     pwr = atof(token);
-  //     // then we should get a float for the amount of time to run the motor, in seconds...
-  //     token = strtok(NULL, " ");
-  //     motor_runtime_millis = int(atof(token)*1000.0);
-  //   }
-    //////////////////
-    // DEBUGGING
-    // Serial.println("You want to run the motor ");
-    // Serial.println(cmd_letter);
-    // Serial.println("At this power:");
-    // Serial.println(pwr);
-    // Serial.println("For this many milliseconds:");
-    // Serial.println(motor_runtime_millis);
-    // END DEBUGGING
-    //////////////////
-    // If we got a good reading, set up for a timed loop:
-    // if(cmd_letter == "f" or cmd_letter == "r"){
-    //   // Reset the time
-    //   prev_time = millis();
-    //   curr_time = millis();
-    //   // We choose fast decay here ("coast"). So, per https://www.ti.com/lit/ds/symlink/drv8833.pdf, ...
-    //   if(cmd_letter == "f"){
-    //     // if forward, AIN1 is PWM, and AIN2 is low.
-    //     Serial.println("Turning motor ON FWD");
-    //     analogWrite(AIN1, convert_duty(pwr));
-    //     // digitalWrite(AIN1, 1);
-    //     analogWrite(AIN2, 0);
-    //   }
-    //   if(cmd_letter == "r"){
-    //     // if reverse, AIN1 is low, and AIN2 is PWM.
-    //     Serial.println("Turning motor ON REV");
-    //     analogWrite(AIN1, 0);
-    //     analogWrite(AIN2, convert_duty(pwr));
-    //   }
-    //   motor_is_on = 1;
-    //   digitalWrite(LED_BUILTIN, HIGH);
-    //   // run until time is up...
-    // }
-  // }
-  // // now, after handling any serial received, we update our time and check if we need to shut off the motor.
-  // if(motor_is_on){
-  //   curr_time = millis();
-  //   if( (curr_time - prev_time) > motor_runtime_millis ){
-  //     // shut down and reset.
-  //     analogWrite(AIN1, 0);
-  //     analogWrite(AIN2, 0);
-  //     motor_runtime_millis = 0;
-  //     prev_time = millis();
-  //     motor_is_on = 0;
-  //     Serial.println("Turning motor OFF");
-  //     digitalWrite(LED_BUILTIN, LOW);
-  //   }
-  // }
+  // for the capture:
+  // States: 0 = capture open waiting, 1 = capture closing, 2 = capture closed waiting, 3 = capture opening
+  switch(capture_state){
+    case 0:
+      // capture is open, waiting. Switch to closing if timed out
+      if((curr_time - prev_time_capture) > capture_waittime_millis){
+        capture_state = 1;
+        prev_time_capture = millis();
+        Serial.println("CAPTURE OPENING...");
+        update_capture(capture_state);
+      }
+      break;
+    
+    case 1:
+      // capture is opening. Stop opening if timed out
+      if((curr_time - prev_time_capture) > capture_open_pulse){
+        capture_state = 2;
+        prev_time_capture = millis();
+        Serial.println("CAPTURE WAITING...");
+        update_capture(capture_state);
+      }
+      break;
+    
+    case 2:
+      // capture is closed, waiting. Switch to opening if timed out
+      if((curr_time - prev_time_capture) > capture_waittime_millis){
+        capture_state = 3;
+        prev_time_capture = millis();
+        Serial.println("CAPTURE CLOSING...");
+        update_capture(capture_state);
+      }
+      break;
+    
+    case 3:
+      // capture is closing. Stop closing if timed out
+      if((curr_time - prev_time_capture) > capture_close_pulse){
+        capture_state = 0;
+        prev_time_capture = millis();
+        Serial.println("CAPTURE WAITING...");
+        update_capture(capture_state);
+      }
+      break;
+  }
 }
