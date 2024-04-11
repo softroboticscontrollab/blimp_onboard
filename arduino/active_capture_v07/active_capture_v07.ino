@@ -36,8 +36,8 @@ int adjusted_speed = 0; // is a positive number
 int raw_duty = 0;
 
 // For the open loop, set our motion parameters
-int ascend_time_millis = 10000;
-int descend_time_millis = 10000;
+int ascend_time_millis = 15000;
+int descend_time_millis = 4000;
 int capture_open_pulse = 700;
 int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
@@ -90,7 +90,8 @@ void update_fan(int state, float pwr)
 
     case 1:
       // ascend
-      esc.write(convert_esc(pwr));
+      // HACK 2024-04-10: ascend and descend are flipped. To descend faster, add power here. Twice as fast?
+      esc.write(convert_esc(pwr*2.0));
       break;
 
     case 2:
@@ -152,6 +153,15 @@ void setup() {
   // we'll also turn on the LED when any pin is set high
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
+  // Startup sequence blink to know the code is running
+  int cycles = 3;
+  for(int i=0; i<cycles; i++){
+    Serial.println("Starting up (LED blink to indicate)...");
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(1000);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(1000);
+  }
   // set up the ESC
   pinMode(ESC_PIN, OUTPUT);
   esc.attach(ESC_PIN, ESC_MIN, ESC_MAX);
