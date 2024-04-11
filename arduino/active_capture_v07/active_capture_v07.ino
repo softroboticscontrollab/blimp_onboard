@@ -36,12 +36,12 @@ int adjusted_speed = 0; // is a positive number
 int raw_duty = 0;
 
 // For the open loop, set our motion parameters
-int ascend_time_millis = 15000;
-int descend_time_millis = 4000;
+int ascend_time_millis = 4000;
+int descend_time_millis = 15000;
 int capture_open_pulse = 700;
 int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
-float fan_pwr_default = 0.2;
+float fan_pwr_default = 0.5;
 float capture_pwr_default = 0.5;
 // flags for the state machine of capture and fan
 int fan_state = 0; // States: 0 = not running, 1 = ascend, 2 = descend
@@ -77,6 +77,17 @@ int convert_esc(float percent_speed)
   return adjusted_speed;
 }
 
+void fan_startup()
+{
+  // Toggle the fan back and forth at 100% power a few times.
+  Serial.println("Toggling fan...");
+  esc.write(ESC_MAX);
+  delay(3000);
+  esc.write(ESC_MIN);
+  delay(3000);
+  esc.write(ESC_AVG);
+}
+
 // helper that toggles our fan. state = int, see above, pwr = percent if override desired.
 void update_fan(int state){
   update_fan(state, fan_pwr_default);
@@ -91,12 +102,14 @@ void update_fan(int state, float pwr)
     case 1:
       // ascend
       // HACK 2024-04-10: ascend and descend are flipped. To descend faster, add power here. Twice as fast?
-      esc.write(convert_esc(pwr*2.0));
+      esc.write(convert_esc(pwr));
       break;
 
     case 2:
       // descend
-      esc.write(convert_esc(-pwr)); // pwr should be positive, so descending means negative direction.
+      // HACK 2024-04-10: ascend and desend are flipped. Since the blimp is heavy, make it full negative... which is MIN here.
+      // esc.write(convert_esc(-pwr)); // pwr should be positive, so descending means negative direction.
+      esc.write(ESC_MIN); // pwr should be positive, so descending means negative direction.
       break;
   }
 }
@@ -168,6 +181,7 @@ void setup() {
   esc.write(ESC_AVG);
   Serial.println("ESC NEUTRAL, Waiting for esc to start up...");
   delay(10000);
+  fan_startup();
   Serial.println("Beginning open loop motion...");
   // Time management for timed motor loops
   prev_time_fan = millis();
