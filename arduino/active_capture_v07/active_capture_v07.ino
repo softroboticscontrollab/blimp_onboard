@@ -36,15 +36,16 @@ int adjusted_speed = 0; // is a positive number
 int raw_duty = 0;
 
 // For the open loop, set our motion parameters
-int ascend_time_millis = 3000;
-int descend_time_millis = 5000;
+int ascend_time_millis = 4000;
+int descend_time_millis = 3000;
+int coast_time_millis = 10000;
 int capture_open_pulse = 700;
 int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
 float fan_pwr_default = 0.5; // was 0.5
 float capture_pwr_default = 0.5;
 // flags for the state machine of capture and fan
-int fan_state = 0; // States: 0 = not running, 1 = ascend, 2 = descend
+int fan_state = 0; // States: 0 = coast before ascend, 1 = ascend, 2 = coast before descend, 3 = descend
 int capture_state = 0; // States: 0 = capture open waiting, 1 = capture closing, 2 = capture closed waiting, 3 = capture opening
 // Time management
 unsigned long curr_time;
@@ -72,8 +73,8 @@ int convert_esc(float percent_speed)
   adjusted_speed = (adjusted_speed < ESC_MIN) ? ESC_MIN : adjusted_speed;
   adjusted_speed = (adjusted_speed > ESC_MAX) ? ESC_MAX : adjusted_speed;
   // DEBUGGING
-  // Serial.println("Setting ESC speed to:");
-  // Serial.println(adjusted_speed);
+  Serial.println("Setting ESC speed to:");
+  Serial.println(adjusted_speed);
   return adjusted_speed;
 }
 
@@ -96,7 +97,8 @@ void update_fan(int state, float pwr)
 {
   switch(state){
     case 0:
-      // not running. State currently unused.
+      // coast before ascending.
+      esc.write(convert_esc(0.0));
       break;
 
     case 1:
@@ -104,8 +106,13 @@ void update_fan(int state, float pwr)
       // HACK 2024-04-10: ascend and descend are flipped. To descend faster, add power here. Twice as fast?
       esc.write(convert_esc(pwr));
       break;
-
+    
     case 2:
+      // coast before descending
+      esc.write(convert_esc(0.0));
+      break;
+
+    case 3:
       // descend
       // HACK 2024-04-10: ascend and desend are flipped. Since the blimp is heavy, make it full negative... which is MIN here.
       esc.write(convert_esc(-pwr)); // pwr should be positive, so descending means negative direction.
@@ -188,7 +195,7 @@ void setup() {
   prev_time_capture = millis();
   curr_time = millis();
   // Turn on the fan and set the mouth to waiting open.
-  fan_state = 1;
+  fan_state = 0;
   update_fan(fan_state);
   capture_state = 0;
   update_capture(capture_state);
@@ -200,14 +207,32 @@ void loop() {
   // For the fan:
   switch(fan_state){
     case 0:
-      // not running. State currently unused.
+      // coast before ascending. Check if coast time is up
+      if( (curr_time - prev_time_fan) > coast_time_millis){
+        fan_state = 1;
+        prev_time_fan = millis();
+        // DEBUGGING
+        Serial.println("Switching to ascend...");
+        update_fan(fan_state, 1.0);
+      }
       break;
 
     case 1:
       // ascending
-      // Check if our ascent time is up. If so, switch to descending
+      // Check if our ascent time is up. If so, switch to coast
       if( (curr_time - prev_time_fan) > ascend_time_millis){
         fan_state = 2;
+        prev_time_fan = millis();
+        // DEBUGGING
+        Serial.println("Switching to coast before descend...");
+        update_fan(fan_state, 0.0);
+      }
+      break;
+
+    case 2:
+      // coast before ascending. Check if coast time is up
+      if( (curr_time - prev_time_fan) > coast_time_millis){
+        fan_state = 3;
         prev_time_fan = millis();
         // DEBUGGING
         Serial.println("Switching to descend...");
@@ -215,14 +240,14 @@ void loop() {
       }
       break;
 
-    case 2:
+    case 3:
       // descending
       // Check if our descent time is up. If so, switch to ascending.
       if((curr_time - prev_time_fan) > descend_time_millis){
-        fan_state = 1;
+        fan_state = 0;
         prev_time_fan = millis();
-        Serial.println("Switching to ascend...");
-        update_fan(fan_state, 1.0);
+        Serial.println("Switching to coast before ascend...");
+        update_fan(fan_state);
       }
       break;
   }
