@@ -36,12 +36,12 @@ int adjusted_speed = 0; // is a positive number
 int raw_duty = 0;
 
 // For the open loop, set our motion parameters
-int ascend_time_millis = 4000;
-int descend_time_millis = 15000;
+int ascend_time_millis = 3000;
+int descend_time_millis = 5000;
 int capture_open_pulse = 700;
 int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
-float fan_pwr_default = 0.5;
+float fan_pwr_default = 0.5; // was 0.5
 float capture_pwr_default = 0.5;
 // flags for the state machine of capture and fan
 int fan_state = 0; // States: 0 = not running, 1 = ascend, 2 = descend
@@ -108,8 +108,8 @@ void update_fan(int state, float pwr)
     case 2:
       // descend
       // HACK 2024-04-10: ascend and desend are flipped. Since the blimp is heavy, make it full negative... which is MIN here.
-      // esc.write(convert_esc(-pwr)); // pwr should be positive, so descending means negative direction.
-      esc.write(ESC_MIN); // pwr should be positive, so descending means negative direction.
+      esc.write(convert_esc(-pwr)); // pwr should be positive, so descending means negative direction.
+      //esc.write(ESC_MIN); // pwr should be positive, so descending means negative direction.
       break;
   }
 }
@@ -211,7 +211,7 @@ void loop() {
         prev_time_fan = millis();
         // DEBUGGING
         Serial.println("Switching to descend...");
-        update_fan(fan_state);
+        update_fan(fan_state, 1.0);
       }
       break;
 
@@ -222,7 +222,7 @@ void loop() {
         fan_state = 1;
         prev_time_fan = millis();
         Serial.println("Switching to ascend...");
-        update_fan(fan_state);
+        update_fan(fan_state, 1.0);
       }
       break;
   }
