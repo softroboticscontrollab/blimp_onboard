@@ -37,8 +37,8 @@ int raw_duty = 0;
 
 // For the open loop, set our motion parameters
 int ascend_time_millis = 4000;
-int descend_time_millis = 3000;
-int coast_time_millis = 10000;
+int descend_time_millis = 2000;
+int coast_time_millis = 15000;
 int capture_open_pulse = 700;
 int capture_close_pulse = 1500;
 int capture_waittime_millis = 8000;
